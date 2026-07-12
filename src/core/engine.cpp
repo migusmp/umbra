@@ -2,6 +2,7 @@
 #include "../renderer/camera.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
+#include <vector>
 
 // De momento el GLSL vive aquí mismo, como texto (raw string literal, con
 // R"(...)"). Más adelante, cuando tengamos un AssetManager, esto pasará a
@@ -10,6 +11,8 @@
 static const char *vertexShaderSrc = R"(
 #version 450 core
 layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aNormal;
+layout (location = 2) in vec2 aTexCoords;
 
 uniform mat4 model;
 uniform mat4 view;
@@ -44,7 +47,22 @@ Engine::Engine(const std::string &title, int width, int height)
     // por dentro todavía no existirían (mismo problema de orden que ya
     // vimos con SDL_Init).
     shader = std::make_unique<Shader>(vertexShaderSrc, fragmentShaderSrc);
-    triangle = std::make_unique<Triangle>();
+
+    // Mismo triángulo de siempre, pero ahora expresado como Mesh: 3
+    // vértices únicos + 3 índices (un solo triángulo, sin nada compartido
+    // que aprovechar todavía — el EBO se nota de verdad con geometría más
+    // compleja, pero la clase ya está lista para eso).
+    std::vector<Vertex> vertices = {
+        {glm::vec3(0.0f, 0.5f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f),
+         glm::vec2(0.5f, 1.0f)},
+        {glm::vec3(-0.5f, -0.5f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f),
+         glm::vec2(0.0f, 0.0f)},
+        {glm::vec3(0.5f, -0.5f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f),
+         glm::vec2(1.0f, 0.0f)},
+    };
+    std::vector<unsigned int> indices = {0, 1, 2};
+
+    mesh = std::make_unique<Mesh>(vertices, indices);
 
     float aspectRatio = static_cast<float>(width) / static_cast<float>(height);
     // Cámara colocada un poco atrás en Z, mirando hacia el origen (donde
@@ -128,7 +146,7 @@ void Engine::render() {
     shader->setMat4("view", camera->getViewMatrix());
     shader->setMat4("projection", camera->getProjectionMatrix());
 
-    triangle->draw();
+    mesh->draw();
 
     SDL_GL_SwapWindow(window->getHandle());
 }
