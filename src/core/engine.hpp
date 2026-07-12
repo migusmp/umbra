@@ -1,25 +1,31 @@
 #pragma once
+#include "../renderer/shader.hpp"
+#include "../renderer/triangle.hpp"
 #include <SDL2/SDL.h>
 
 #include <memory>
 
+#include "SDL_stdinc.h"
 #include "window.hpp"
 
 class Engine {
-   public:
-    Engine(const std::string& title, int width, int height);
+  public:
+    Engine(const std::string &title, int width, int height);
     ~Engine();
 
     void run();
 
-   private:
+  private:
     void processEvents();
-    void update();
+    void update(float dt);
     void render();
 
     // unique_ptr en vez de Window directo: así controlamos exactamente CUÁNDO
     // se construye (después de SDL_Init), en vez de que C++ lo haga
     // automáticamente antes del cuerpo del constructor.
     std::unique_ptr<Window> window;
+    std::unique_ptr<Shader> shader;
+    std::unique_ptr<Triangle> triangle;
     bool running;
+    Uint64 lastTime;
 };

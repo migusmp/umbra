@@ -11,7 +11,7 @@ LDFLAGS := $(shell pkg-config --libs sdl2) -ldl
 TARGET := umbra
 
 # Fuentes: tu código + glad (que es C, pero g++ lo compila igual)
-SRC := src/main.cpp src/core/window.cpp src/core/engine.cpp vendor/glad/src/glad.c
+SRC := src/main.cpp src/core/window.cpp src/core/engine.cpp src/renderer/shader.cpp src/renderer/triangle.cpp vendor/glad/src/glad.c
 
 # Un .o por cada .cpp/.c, guardados en build/ para no ensuciar el proyecto
 OBJ_DIR := build
