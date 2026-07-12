@@ -1,4 +1,5 @@
 #pragma once
+#include "../renderer/camera.hpp"
 #include "../renderer/shader.hpp"
 #include "../renderer/triangle.hpp"
 #include <SDL2/SDL.h>
@@ -26,6 +27,10 @@ class Engine {
     std::unique_ptr<Window> window;
     std::unique_ptr<Shader> shader;
     std::unique_ptr<Triangle> triangle;
+    std::unique_ptr<Camera> camera;
+
+    int width;
+    int height;
     bool running;
     Uint64 lastTime;
 };

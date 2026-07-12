@@ -1,5 +1,6 @@
 #pragma once
 #include <glad/glad.h>
+#include <glm/glm.hpp>
 #include <string>
 
 class Shader {
@@ -10,6 +11,7 @@ class Shader {
     ~Shader();
 
     void use() const;
+    void setMat4(const std::string &name, const glm::mat4 &matrix) const;
 
   private:
     GLuint compile(GLenum type, const std::string &source);
