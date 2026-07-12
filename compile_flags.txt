@@ -1,0 +1,3 @@
+-I vendor/glad/include
+-I /usr/include/SDL2
+-std=c++20
