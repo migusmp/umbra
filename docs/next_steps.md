@@ -1,84 +1,123 @@
-# Umbra — Próximos pasos: matrices y cámara
+# Umbra — Siguiente hito: cargar modelos 3D reales
 
-Estado actual: hito 1 del roadmap completo — ventana + contexto OpenGL +
-triángulo dibujado con VBO/VAO/shaders, en clip space fijo (-1 a 1, sin
-relación con ninguna cámara).
+Estado actual: ventana + contexto OpenGL + triángulo con VBO/VAO/shaders +
+sistema completo de matrices (Model/View/Projection) + cámara libre movible
+con WASD y ratón.
 
-Este documento cubre el siguiente hito: dotar al motor de las matrices de
-transformación y una cámara real, base indispensable antes de cargar modelos
-o meter física.
-
----
-
-## Por qué este paso, antes que cargar modelos
-
-Ahora mismo el triángulo no tiene "posición en el mundo" — sus coordenadas
-van directas del VBO a `gl_Position`. Cualquier modelo que carguemos después
-se comportaría igual de estático si no resolvemos esto antes: necesitamos el
-sistema que traduce "un objeto en un mundo 3D, visto desde una cámara" a las
-coordenadas de -1 a 1 que la GPU espera.
+Este documento cubre el siguiente bloque: pasar de un triángulo hardcodeado
+a cargar modelos 3D reales desde archivo, usando `assimp`.
 
 ---
 
-## Conceptos que entran en este hito
+## 1. Concepto nuevo: índices (Element Buffer Object / EBO)
 
-### Las tres matrices del pipeline (Model — View — Projection)
+### El problema que resuelve
 
-- **Model** — dónde está el objeto en el mundo: posición, rotación, escala.
-- **View** — dónde está la cámara y hacia dónde mira. Conceptualmente es
-  "mover todo el mundo al revés de como se mueve la cámara".
-- **Projection** — cómo se convierte el espacio 3D en algo que cabe en una
-  pantalla 2D, con perspectiva (lo lejano se ve más pequeño).
+Ahora mismo, `Triangle` guarda 3 vértices en el VBO — uno por cada esquina,
+sin repetir nada, porque un triángulo no comparte vértices con nada. Pero en
+cualquier modelo real, la mayoría de vértices son **compartidos entre varios
+triángulos**.
 
-Las tres se multiplican juntas (`projection * view * model * position`) y
-ese resultado es lo que calcula el vertex shader para cada vértice, en vez
-de usar la posición del VBO directamente.
+Ejemplo: un cuadrado se dibuja como dos triángulos. Sin compartir vértices,
+tendrías que repetir 2 de las 4 esquinas (6 vértices en el VBO para solo 4
+puntos distintos). En un modelo con miles de vértices, esa duplicación
+desperdicia memoria de GPU de forma notable — y en modelos reales, cada
+vértice suele compartirse entre 4-6 triángulos de media.
 
-### GLM — la librería de matemáticas
+### La solución: separar "vértices únicos" de "cómo se conectan"
 
-Aporta los tipos `glm::mat4`, `glm::vec3`, y funciones ya construidas para
-generar estas matrices sin escribir el álgebra a mano: `glm::perspective`
-(para Projection), `glm::lookAt` (para View), `glm::translate`/`rotate`/
-`scale` (para Model).
+En vez de repetir vértices, se guardan dos buffers distintos:
 
-### Uniforms
+- **VBO** — la lista de vértices únicos (posición, normal, UV de cada uno),
+  sin repetición.
+- **EBO** (Element Buffer Object, a veces llamado *index buffer*) — una
+  lista de **números enteros**, donde cada grupo de 3 índices dice "forma
+  un triángulo con el vértice número X, el Y, y el Z del VBO".
 
-Hasta ahora el shader solo recibe datos por vértice (atributos, como la
-posición). Las matrices se pasan como **uniforms**: variables globales del
-shader, rellenadas desde C++ antes de cada `draw()`, con el mismo valor para
-todos los vértices de esa llamada.
+Para el cuadrado del ejemplo: el VBO tiene solo 4 vértices (las 4 esquinas),
+y el EBO tiene 6 índices: `0, 1, 2, 2, 3, 0` — describiendo los dos
+triángulos reutilizando las esquinas compartidas.
 
-### Clase `Camera`
+### Cómo se usa en la práctica
 
-Guarda posición y orientación, y expone un método que devuelve la matriz
-View ya calculada. Primero se deja fija para confirmar que las matrices
-funcionan; después se le añade input de teclado/ratón para moverla en
-tiempo real (estilo cámara libre FPS).
+Al dibujar, en vez de `glDrawArrays` (que ya conoces, del triángulo actual —
+dibuja los vértices del VBO en orden, tal cual), se usa `glDrawElements`,
+que le dice a la GPU: "dibuja usando este EBO como guía de qué vértices
+conectar en qué orden". El EBO se asocia al VAO igual que el VBO, así que
+una vez configurado, dibujar sigue siendo una sola llamada.
+
+Esto es exactamente lo que asimp te va a dar ya preparado al cargar un
+modelo: una lista de vértices únicos + una lista de índices que describe
+la conectividad — por eso este concepto hay que entenderlo antes de tocar
+la carga de modelos.
 
 ---
 
-## Roadmap concreto de este hito
+## 2. Instalar assimp
 
-1. **Instalar GLM** — librería header-only, sin compilación necesaria.
-2. **Ampliar `Shader`** para poder enviar uniforms — un método tipo
-   `setMat4(nombre, matriz)` que internamente use `glGetUniformLocation` +
-   `glUniformMatrix4fv`.
-3. **Reescribir el vertex shader** — en vez de `gl_Position = vec4(aPos, 1.0)`,
-   declarar los tres uniforms (`model`, `view`, `projection`) y aplicar
-   `gl_Position = projection * view * model * vec4(aPos, 1.0)`.
-4. **Crear la clase `Camera`** — posición fija de prueba, con un método
-   `getViewMatrix()` (usando `glm::lookAt`) y otro `getProjectionMatrix()`
-   (usando `glm::perspective`, necesita el aspect ratio de la ventana).
-5. **Conectar todo en `Engine::render()`** — antes de `triangle->draw()`,
-   calcular las tres matrices y mandarlas al shader vía los uniforms.
-6. **Verificación visual** — el triángulo debería seguir viéndose en
-   pantalla, pero ahora pasando por una cámara con perspectiva real. Buena
-   prueba: cambiar la posición Z de la cámara en el código y comprobar que
-   el triángulo se ve más grande/pequeño según la distancia — si eso
-   funciona, las matrices están bien encadenadas.
-7. **Input de cámara libre** — mover la cámara con teclado (WASD) y
-   rotarla con el ratón. Aquí es donde el espacio 3D empieza a "sentirse"
-   real, no solo matemáticamente correcto.
+En Arch, está disponible directamente en los repositorios oficiales:
+
+```bash
+sudo pacman -S assimp
+```
+
+Esto instala tanto la librería compartida (`libassimp.so`) como los headers
+de desarrollo necesarios para compilar contra ella. Comprueba que `pkg-config`
+la detecta correctamente:
+
+```bash
+pkg-config --cflags --libs assimp
+```
+
+Si devuelve algo tipo `-I/usr/include -lassimp`, está lista para usarse.
+Como ya haces con SDL2, el `Makefile` se actualizará para incluir estos
+flags automáticamente en la compilación y el enlazado.
+
+---
+
+## 3. Roadmap concreto de este hito
+
+1. **Generalizar `Triangle` → `Mesh`**
+   Convertir la clase actual, hardcodeada a 3 vértices fijos, en una clase
+   genérica que reciba cualquier lista de vértices (con posición y, más
+   adelante, normal y UV) más una lista de índices, y construya VBO + VAO +
+   EBO a partir de eso. El triángulo actual pasa a ser, simplemente, el caso
+   de prueba más simple posible de `Mesh` (3 vértices, 3 índices).
+
+2. **Conseguir un modelo de prueba simple**
+   Antes de cargar algo complejo, un cubo o una esfera baja en polígonos en
+   formato `.obj` (el formato más simple de parsear y depurar visualmente).
+   Se puede exportar uno desde Blender, o descargar un `.obj` de prueba de
+   dominio público.
+
+3. **Crear la clase `Model`**
+   Usa la API de assimp (`Assimp::Importer`) para leer el archivo, recorrer
+   su estructura interna (una escena con nodos y mallas), y por cada malla
+   encontrada extraer vértices, normales, UVs e índices — construyendo un
+   `Mesh` (del paso 1) por cada una.
+
+4. **Ajustar el vertex shader**
+   Añadir un segundo atributo de entrada para la normal de cada vértice
+   (`layout (location = 1) in vec3 aNormal`), aunque de momento no se use
+   todavía — se necesitará en el siguiente hito (iluminación), y es más
+   simple dejarlo ya preparado en el VAO ahora que se está tocando esta
+   parte del código.
+
+5. **Cargar el modelo de prueba en `Engine`**
+   Sustituir `Triangle` por un `Model` cargado desde el archivo `.obj`, y
+   confirmar visualmente que aparece con la forma correcta, navegable con
+   la cámara libre que ya funciona.
+
+6. **Verificación**
+   - El modelo debería verse con las proporciones correctas comparado con
+     abrirlo en un visor externo (Blender, o cualquier visor de `.obj`).
+   - Si aparece con partes "hacia dentro" o negras en zonas que deberían
+     verse, suele ser un problema de orientación de triángulos (*winding
+     order*, `glFrontFace`) o de *culling* — se documentará si aparece.
+   - Si el modelo aparece pero deformado o estirado, normalmente es un
+     problema de cómo se están leyendo los índices o el stride de los
+     atributos en el VAO — revisar contra el `Triangle` actual como
+     referencia de qué configuración sí funciona.
 
 ---
 
@@ -87,29 +126,16 @@ tiempo real (estilo cámara libre FPS).
 ```
 umbra/
 ├── src/
-│   ├── core/
-│   │   ├── window.hpp / .cpp
-│   │   └── engine.hpp / .cpp
 │   └── renderer/
-│       ├── shader.hpp / .cpp      (se amplía: setMat4, etc.)
-│       ├── triangle.hpp / .cpp
-│       └── camera.hpp / .cpp      ← nuevo
-└── vendor/
-    └── glm/                        ← nuevo (header-only)
+│       ├── shader.hpp / .cpp
+│       ├── mesh.hpp / .cpp        ← sustituye a triangle.hpp / .cpp
+│       ├── model.hpp / .cpp       ← nuevo
+│       └── camera.hpp / .cpp
+└── assets/
+    └── models/
+        └── test_cube.obj           ← modelo de prueba
 ```
 
----
-
-## Cómo se verifica el progreso en este hito
-
-- Antes de tocar `Camera`, prueba las matrices con valores fijos hardcodeados
-  en `render()` — más fácil de depurar que meter la clase completa a la
-  primera.
-- Si el triángulo desaparece de la pantalla al añadir las matrices, lo más
-  probable es un problema de *near/far plane* en la proyección, o la cámara
-  mirando en la dirección equivocada — antes de sospechar del VBO/VAO
-  (que ya sabemos que funciona desde el hito anterior).
-- Comprueba con `glGetError()` después de las llamadas nuevas
-  (`glUniformMatrix4fv`, etc.) si algo no se ve como se espera — un location
-  de uniform inválido (-1) no da crash, simplemente no hace nada, y es un
-  bug silencioso fácil de perder de vista.
+`assets/` se usa por primera vez en este hito — es donde vivirán los
+recursos que no son código (modelos, texturas, shaders si algún día se
+mueven a archivo en vez de raw strings).

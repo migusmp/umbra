@@ -49,7 +49,13 @@ Engine::Engine(const std::string &title, int width, int height)
     float aspectRatio = static_cast<float>(width) / static_cast<float>(height);
     // Cámara colocada un poco atrás en Z, mirando hacia el origen (donde
     // está el triángulo) por la dirección por defecto (-Z).
-    camera = std::make_unique<Camera>(glm::vec3(0.0f, 0.0f, 6.0f), aspectRatio);
+    camera = std::make_unique<Camera>(glm::vec3(0.0f, 0.0f, 3.0f), aspectRatio);
+
+    // Modo relativo: oculta el cursor y lo "reencierra" en el centro cada
+    // frame, dándonos el movimiento del ratón como delta (xrel/yrel) en vez
+    // de una posición absoluta en pantalla — justo lo que necesita una
+    // cámara estilo FPS.
+    SDL_SetRelativeMouseMode(SDL_TRUE);
 
     lastTime = SDL_GetTicks64();
     running = true;
@@ -75,10 +81,38 @@ void Engine::processEvents() {
         if (event.type == SDL_QUIT) {
             running = false;
         }
+
+        if (event.type == SDL_MOUSEMOTION) {
+            // yrel se invierte: en pantalla, "abajo" es positivo, pero
+            // queremos que mover el ratón hacia ARRIBA incline la cámara
+            // hacia arriba (pitch positivo).
+            camera->processMouseMovement(
+                static_cast<float>(event.motion.xrel),
+                static_cast<float>(-event.motion.yrel));
+        }
+
+        if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
+            running = false;
+        }
     }
 }
 
-void Engine::update(float dt) { (void)dt; }
+void Engine::update(float dt) {
+    // SDL_GetKeyboardState nos da el estado ACTUAL de cada tecla (pulsada
+    // o no) en cada frame — a diferencia de SDL_KEYDOWN/UP en el loop de
+    // eventos, que solo avisa del CAMBIO de estado. Para movimiento
+    // continuo (mientras la tecla siga pulsada), esto es lo correcto.
+    const Uint8 *keys = SDL_GetKeyboardState(nullptr);
+
+    if (keys[SDL_SCANCODE_W])
+        camera->processKeyboard(CameraMovement::FORWARD, dt);
+    if (keys[SDL_SCANCODE_S])
+        camera->processKeyboard(CameraMovement::BACKWARD, dt);
+    if (keys[SDL_SCANCODE_A])
+        camera->processKeyboard(CameraMovement::LEFT, dt);
+    if (keys[SDL_SCANCODE_D])
+        camera->processKeyboard(CameraMovement::RIGHT, dt);
+}
 
 void Engine::render() {
     glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
