@@ -24,7 +24,7 @@ A **C++20** OpenGL 4.5 Core game engine. From scratch, step by step — no frame
 | 🧩 **ECS** | Entity-component registry (sparse array, view<T...>(), shared models) | ✅ Done |
 | 🔄 **Engine** | Game loop (processEvents → update → render) with dt | ✅ Done |
 | 🏗️ **Build** | Makefile, C++20, `pkg-config` deps | ✅ Done |
-| 🖥️ **ImGui** | Dear ImGui vendored (SDL2 + OpenGL3 backends) | 📦 Vendored |
+| 🖥️ **ImGui** | Debug UI (FPS, entity inspector, camera stats) | ✅ Done |
 
 ### What it does right now
 
@@ -33,6 +33,7 @@ main()
   └─ Engine("Umbra", 800, 600)
        ├─ Window (SDL2 + GL 4.5 Core context + depth test)
        ├─ Shader (inline GLSL 450 core)
+       ├─ DebugUI (ImGui: FPS, entity inspector, camera stats)
        ├─ Registry                     ← ECS
        │   ├─ Entity 0 (TransformComponent + MeshRendererComponent)
        │   │   └─ Model("assets/models/test_cube.obj")  ← shared_ptr
@@ -40,9 +41,13 @@ main()
        │       └─ Model("assets/models/test_cube.obj")  ← shared_ptr (mismo)
        ├─ Camera(position, yaw, pitch, aspect)
        └─ run()
-            └─ loop { events → update(dt) → render }
-                 ├─ update: processKeyboard → camera
-                 │          rotation.y += 30°·dt  → Entity 0 (ECS)
+            └─ loop { processEvents → update(dt) → render }
+                 ├─ processEvents: SDL_PollEvent → debugUI→processEvent
+                 │        └─ mouse motion → camera (solo si ImGui no captura)
+                 ├─ update: debugUI→buildUI(registry, camera)
+                 │          SDL_SetRelativeMouseMode (toggle según ImGui)
+                 │          processKeyboard → camera (solo si ImGui no captura)
+                 │          rotation.y += 30°·dt → Entity 0 (ECS)
                  └─ render: clear → shader→use()
                       ├─ uniforms (view, projection, lightDir, lightColor, viewPos)
                       ├─ registry.view<Transform, MeshRenderer>()
@@ -50,6 +55,7 @@ main()
                       │        ├─ setMat4("model", transform.getModelMatrix())
                       │        ├─ setVec3("objectColor", ...)
                       │        └─ model→draw()
+                      ├─ debugUI→render()
                       └─ SDL_GL_SwapWindow
 ```
 
@@ -66,7 +72,7 @@ Two cubes in real time — one rotating, one static — both sharing the same mo
 | Space | Move up (Y axis) |
 | Ctrl (left) | Move down (Y axis) |
 | Mouse | Look around (pitch/yaw) |
-| Escape | Quit |
+| Escape | Quit (solo si ImGui no captura el teclado) |
 
 ---
 
@@ -105,11 +111,13 @@ src/
 │   ├── component_array.hpp    # Dense array, O(1) swap-and-pop
 │   ├── components.hpp         # TransformComponent + MeshRendererComponent
 │   └── registry.hpp           # create/destroy/view<T...>(), add/get/removeComponent
-└── renderer/
-    ├── shader.hpp/.cpp        # GLSL compile/link, setMat4, setVec3
-    ├── mesh.hpp/.cpp          # Generic VAO/VBO/EBO, Vertex struct, move-only
-    ├── model.hpp/.cpp         # Assimp loader (scene → nodes → meshes)
-    └── camera.hpp/.cpp        # 3D FPS camera, view/projection matrices
+├── renderer/
+│   ├── shader.hpp/.cpp        # GLSL compile/link, setMat4, setVec3
+│   ├── mesh.hpp/.cpp          # Generic VAO/VBO/EBO, Vertex struct, move-only
+│   ├── model.hpp/.cpp         # Assimp loader (scene → nodes → meshes)
+│   └── camera.hpp/.cpp        # 3D FPS camera, view/projection matrices
+└── ui/
+    └── debug_ui.hpp/.cpp      # ImGui wrapper: init, FPS, entity inspector, camera stats
 assets/
 └── models/
     └── test_cube.obj          # Test model with normals
@@ -156,7 +164,6 @@ Directional light from `vec3(-0.4, -1.0, -0.3)`. Normal matrix computed as `tran
 
 ## Next Steps
 
-- [ ] ImGui integration (HUD, debug overlays)
 - [ ] Texture mapping
 - [ ] Multiple lights (point, spot)
 - [ ] MaterialComponent (per-entity color)

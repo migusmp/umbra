@@ -1,3 +1,5 @@
 -I vendor/glad/include
+-I vendor/imgui
+-I vendor/imgui/backends
 -I /usr/include/SDL2
 -std=c++20

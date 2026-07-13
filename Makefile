@@ -11,6 +11,7 @@ CXX := g++
 # de quien lo incluía, y podían quedar .o desincronizados entre sí (el bug
 # que causó el segfault de antes).
 CXXFLAGS := -std=c++20 -Wall -Wextra -MMD -MP -I vendor/glad/include \
+            -I vendor/imgui -I vendor/imgui/backends \
             $(shell pkg-config --cflags sdl2) $(shell pkg-config --cflags assimp)
 LDFLAGS := $(shell pkg-config --libs sdl2) $(shell pkg-config --libs assimp) -ldl
 
@@ -19,7 +20,11 @@ TARGET := umbra
 # Fuentes: tu código + glad (que es C, pero g++ lo compila igual)
 SRC := src/main.cpp src/core/window.cpp src/core/engine.cpp \
        src/renderer/shader.cpp src/renderer/mesh.cpp src/renderer/model.cpp src/renderer/camera.cpp \
-       vendor/glad/src/glad.c
+       src/ui/debug_ui.cpp \
+       vendor/glad/src/glad.c vendor/imgui/imgui.cpp vendor/imgui/imgui_draw.cpp \
+       vendor/imgui/imgui_tables.cpp vendor/imgui/imgui_widgets.cpp \
+       vendor/imgui/backends/imgui_impl_opengl3.cpp \
+       vendor/imgui/backends/imgui_impl_sdl2.cpp
 
 # Un .o por cada .cpp/.c, guardados en build/ para no ensuciar el proyecto
 OBJ_DIR := build

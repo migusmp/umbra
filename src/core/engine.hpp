@@ -3,10 +3,10 @@
 
 #include <memory>
 
-#include "../ecs/components.hpp"
 #include "../ecs/registry.hpp"
 #include "../renderer/camera.hpp"
 #include "../renderer/shader.hpp"
+#include "../ui/debug_ui.hpp"
 #include "window.hpp"
 
 class Engine {
@@ -24,6 +24,7 @@ class Engine {
     std::unique_ptr<Window> window;
     std::unique_ptr<Shader> shader;
     std::unique_ptr<Camera> camera;
+    std::unique_ptr<DebugUI> debugUI;
 
     Registry registry;
     Entity cubeEntity;

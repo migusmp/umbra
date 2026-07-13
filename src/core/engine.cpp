@@ -85,6 +85,7 @@ Engine::Engine(const std::string& title, int width, int height)
     }
 
     window = std::make_unique<Window>(title, width, height);
+    debugUI = std::make_unique<DebugUI>(window->getHandle(), window->getGLContext());
 
     // Shader y Triangle se crean AQUÍ, después de que Window ya haya
     // cargado glad — si los creas antes, las funciones de OpenGL que usan
@@ -145,11 +146,13 @@ void Engine::run() {
 void Engine::processEvents() {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
+        debugUI->processEvent(event);
+
         if (event.type == SDL_QUIT) {
             running = false;
         }
 
-        if (event.type == SDL_MOUSEMOTION) {
+        if (event.type == SDL_MOUSEMOTION && !debugUI->wantsCaptureMouse()) {
             // yrel se invierte: en pantalla, "abajo" es positivo, pero
             // queremos que mover el ratón hacia ARRIBA incline la cámara
             // hacia arriba (pitch positivo).
@@ -158,30 +161,40 @@ void Engine::processEvents() {
         }
 
         if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
-            running = false;
+            if (!debugUI->wantsCaptureKeyboard())
+                running = false;
         }
     }
 }
 
 void Engine::update(float dt) {
+    debugUI->buildUI(registry, *camera);
+
+    // Cuando ImGui quiere el ratón (hover sobre panel, slider activo, etc.)
+    // desactivamos el modo relativo para que el cursor del SO sea visible
+    // y se pueda interactuar con la UI.
+    SDL_SetRelativeMouseMode(debugUI->wantsCaptureMouse() ? SDL_FALSE : SDL_TRUE);
+
     // SDL_GetKeyboardState nos da el estado ACTUAL de cada tecla (pulsada
     // o no) en cada frame — a diferencia de SDL_KEYDOWN/UP en el loop de
     // eventos, que solo avisa del CAMBIO de estado. Para movimiento
     // continuo (mientras la tecla siga pulsada), esto es lo correcto.
     const Uint8* keys = SDL_GetKeyboardState(nullptr);
 
-    if (keys[SDL_SCANCODE_W])
-        camera->processKeyboard(CameraMovement::FORWARD, dt);
-    if (keys[SDL_SCANCODE_S])
-        camera->processKeyboard(CameraMovement::BACKWARD, dt);
-    if (keys[SDL_SCANCODE_A])
-        camera->processKeyboard(CameraMovement::LEFT, dt);
-    if (keys[SDL_SCANCODE_D])
-        camera->processKeyboard(CameraMovement::RIGHT, dt);
-    if (keys[SDL_SCANCODE_SPACE])
-        camera->processKeyboard(CameraMovement::UP, dt);
-    if (keys[SDL_SCANCODE_LCTRL])
-        camera->processKeyboard(CameraMovement::DOWN, dt);
+    if (!debugUI->wantsCaptureKeyboard()) {
+        if (keys[SDL_SCANCODE_W])
+            camera->processKeyboard(CameraMovement::FORWARD, dt);
+        if (keys[SDL_SCANCODE_S])
+            camera->processKeyboard(CameraMovement::BACKWARD, dt);
+        if (keys[SDL_SCANCODE_A])
+            camera->processKeyboard(CameraMovement::LEFT, dt);
+        if (keys[SDL_SCANCODE_D])
+            camera->processKeyboard(CameraMovement::RIGHT, dt);
+        if (keys[SDL_SCANCODE_SPACE])
+            camera->processKeyboard(CameraMovement::UP, dt);
+        if (keys[SDL_SCANCODE_LCTRL])
+            camera->processKeyboard(CameraMovement::DOWN, dt);
+    }
 
     // Demostración de que el ECS gestiona estado real que cambia con el
     // tiempo: el primer cubo rota lentamente. Esto es lógica de "sistema"
@@ -223,6 +236,8 @@ void Engine::render() {
 
         meshRenderer.model->draw();
     }
+
+    debugUI->render();
 
     SDL_GL_SwapWindow(window->getHandle());
 }
