@@ -2,10 +2,9 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
-#include <vector>
 
+#include "../ecs/components.hpp"
 #include "../renderer/camera.hpp"
-#include "SDL_scancode.h"
 
 // De momento el GLSL vive aquí mismo, como texto (raw string literal, con
 // R"(...)"). Más adelante, cuando tengamos un AssetManager, esto pasará a
@@ -93,9 +92,24 @@ Engine::Engine(const std::string& title, int width, int height)
     // vimos con SDL_Init).
     shader = std::make_unique<Shader>(vertexShaderSrc, fragmentShaderSrc);
 
-    // Se acabó construir vértices a mano — Model se encarga de leer el
-    // archivo y montar la geometría real por dentro.
-    model = std::make_unique<Model>("assets/models/test_cube.obj");
+    // El modelo se carga UNA vez como shared_ptr, y varias entidades
+    // pueden apuntar a la misma instancia — no hace falta releer el
+    // archivo ni duplicar los buffers de GPU por cada entidad que use
+    // el mismo cubo.
+    auto cubeModel = std::make_shared<Model>("assets/models/test_cube.obj");
+
+    cubeEntity = registry.createEntity();
+    registry.addComponent<TransformComponent>(cubeEntity, TransformComponent{});
+    registry.addComponent<MeshRendererComponent>(cubeEntity, MeshRendererComponent{cubeModel});
+
+    // Segundo cubo, desplazado en X, reutilizando el MISMO modelo — la
+    // prueba real de que el ECS gestiona varias entidades independientes:
+    // cada una con su propio Transform, pero compartiendo la malla.
+    Entity secondCube = registry.createEntity();
+    TransformComponent secondTransform;
+    secondTransform.position = glm::vec3(2.0f, 0.0f, 0.0f);
+    registry.addComponent<TransformComponent>(secondCube, secondTransform);
+    registry.addComponent<MeshRendererComponent>(secondCube, MeshRendererComponent{cubeModel});
 
     float aspectRatio = static_cast<float>(width) / static_cast<float>(height);
     // Cámara colocada un poco atrás en Z, mirando hacia el origen (donde
@@ -166,8 +180,16 @@ void Engine::update(float dt) {
         camera->processKeyboard(CameraMovement::RIGHT, dt);
     if (keys[SDL_SCANCODE_SPACE])
         camera->processKeyboard(CameraMovement::UP, dt);
-    if (keys[SDL_SCANCODE_LSHIFT])
+    if (keys[SDL_SCANCODE_LCTRL])
         camera->processKeyboard(CameraMovement::DOWN, dt);
+
+    // Demostración de que el ECS gestiona estado real que cambia con el
+    // tiempo: el primer cubo rota lentamente. Esto es lógica de "sistema"
+    // (actúa sobre datos de un componente), aunque de momento vive aquí
+    // mismo en vez de en una clase System separada — con solo una regla
+    // de movimiento no compensa la abstracción extra todavía.
+    auto& transform = registry.getComponent<TransformComponent>(cubeEntity);
+    transform.rotation.y += 30.0f * dt;  // 30 grados por segundo
 }
 
 void Engine::render() {
@@ -176,26 +198,31 @@ void Engine::render() {
 
     shader->use();
 
-    // Model: de momento el cubo se queda quieto en el origen, sin
-    // rotación ni escala — matriz identidad.
-    // OJO: se llama "modelMatrix" y no "model" a propósito — ya existe un
-    // miembro de la clase llamado "model" (el unique_ptr<Model> del cubo
-    // cargado), y una variable local con el mismo nombre lo taparía dentro
-    // de esta función.
-    glm::mat4 modelMatrix = glm::mat4(1.0f);
-
-    shader->setMat4("model", modelMatrix);
+    // Estos tres uniforms son iguales para TODA la escena en este frame
+    // (misma cámara, misma luz) — se mandan una sola vez, fuera del bucle
+    // de entidades, en vez de repetirlos por cada una.
     shader->setMat4("view", camera->getViewMatrix());
     shader->setMat4("projection", camera->getProjectionMatrix());
-
-    // Uniforms de iluminación. Luz direccional "desde arriba y de lado",
-    // como si fuera el sol a media tarde.
     shader->setVec3("lightDir", glm::vec3(-0.4f, -1.0f, -0.3f));
     shader->setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
-    shader->setVec3("objectColor", glm::vec3(0.9f, 0.4f, 0.2f));  // el naranja de siempre
     shader->setVec3("viewPos", camera->getPosition());
 
-    model->draw();
+    // Esto es, en esencia, un "sistema de renderizado": recorre todas las
+    // entidades que tengan AMBOS componentes (Transform + MeshRenderer),
+    // y dibuja cada una según sus propios datos. Añadir una entidad nueva
+    // a la escena no requiere tocar esta función en absoluto — basta con
+    // crearla en algún sitio con los componentes adecuados.
+    for (Entity entity : registry.view<TransformComponent, MeshRendererComponent>()) {
+        auto& transform = registry.getComponent<TransformComponent>(entity);
+        auto& meshRenderer = registry.getComponent<MeshRendererComponent>(entity);
+
+        shader->setMat4("model", transform.getModelMatrix());
+        // objectColor de momento fijo aquí — cuando exista un
+        // MaterialComponent, esto vendrá de ahí en vez de un valor fijo.
+        shader->setVec3("objectColor", glm::vec3(0.9f, 0.4f, 0.2f));
+
+        meshRenderer.model->draw();
+    }
 
     SDL_GL_SwapWindow(window->getHandle());
 }

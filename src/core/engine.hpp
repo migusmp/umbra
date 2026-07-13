@@ -3,8 +3,9 @@
 
 #include <memory>
 
+#include "../ecs/components.hpp"
+#include "../ecs/registry.hpp"
 #include "../renderer/camera.hpp"
-#include "../renderer/model.hpp"
 #include "../renderer/shader.hpp"
 #include "window.hpp"
 
@@ -22,8 +23,10 @@ class Engine {
 
     std::unique_ptr<Window> window;
     std::unique_ptr<Shader> shader;
-    std::unique_ptr<Model> model;
     std::unique_ptr<Camera> camera;
+
+    Registry registry;
+    Entity cubeEntity;
 
     int width;
     int height;
