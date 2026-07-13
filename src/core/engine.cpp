@@ -2,8 +2,10 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
+#include <vector>
 
 #include "../renderer/camera.hpp"
+#include "SDL_scancode.h"
 
 // De momento el GLSL vive aquí mismo, como texto (raw string literal, con
 // R"(...)"). Más adelante, cuando tengamos un AssetManager, esto pasará a
@@ -19,7 +21,24 @@ uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
 
+// Datos que el fragment shader necesita para calcular la luz por píxel:
+// posición y normal, ambas en ESPACIO DE MUNDO (no en clip space, que es
+// donde acaba gl_Position — esos dos espacios son distintos y con
+// propósitos distintos).
+out vec3 FragPos;
+out vec3 Normal;
+
 void main() {
+    FragPos = vec3(model * vec4(aPos, 1.0));
+
+    // La normal NO se transforma con "model" directamente — se usa la
+    // matriz normal (transpuesta de la inversa de model). Si el objeto
+    // tuviera escala no uniforme (por ejemplo, estirado solo en X), usar
+    // "model" tal cual dejaría las normales inclinadas de forma incorrecta.
+    // Con escala uniforme (como nuestro cubo ahora) no se notaría el bug,
+    // pero calcularlo bien desde ya evita un dolor de cabeza futuro.
+    Normal = mat3(transpose(inverse(model))) * aNormal;
+
     gl_Position = projection * view * model * vec4(aPos, 1.0);
 }
 )";
@@ -28,8 +47,34 @@ static const char* fragmentShaderSrc = R"(
 #version 450 core
 out vec4 FragColor;
 
+in vec3 FragPos;
+in vec3 Normal;
+
+uniform vec3 lightDir;      // dirección HACIA DONDE viaja la luz (ej: hacia abajo)
+uniform vec3 viewPos;       // posición de la cámara, en espacio de mundo
+uniform vec3 objectColor;
+uniform vec3 lightColor;
+
 void main() {
-    FragColor = vec4(0.9, 0.4, 0.2, 1.0); // naranja
+    // --- Ambiental: una base de luz mínima, siempre presente ---
+    float ambientStrength = 0.15;
+    vec3 ambient = ambientStrength * lightColor;
+
+    // --- Difusa: depende del ángulo entre la normal y la luz ---
+    vec3 norm = normalize(Normal);
+    vec3 lightDirection = normalize(-lightDir); // hacia la luz, no hacia donde viaja
+    float diff = max(dot(norm, lightDirection), 0.0);
+    vec3 diffuse = diff * lightColor;
+
+    // --- Especular: el brillo, depende también de dónde está la cámara ---
+    float specularStrength = 0.5;
+    vec3 viewDirection = normalize(viewPos - FragPos);
+    vec3 reflectDirection = reflect(-lightDirection, norm);
+    float spec = pow(max(dot(viewDirection, reflectDirection), 0.0), 32.0);
+    vec3 specular = specularStrength * spec * lightColor;
+
+    vec3 result = (ambient + diffuse + specular) * objectColor;
+    FragColor = vec4(result, 1.0);
 }
 )";
 
@@ -119,6 +164,10 @@ void Engine::update(float dt) {
         camera->processKeyboard(CameraMovement::LEFT, dt);
     if (keys[SDL_SCANCODE_D])
         camera->processKeyboard(CameraMovement::RIGHT, dt);
+    if (keys[SDL_SCANCODE_SPACE])
+        camera->processKeyboard(CameraMovement::UP, dt);
+    if (keys[SDL_SCANCODE_LSHIFT])
+        camera->processKeyboard(CameraMovement::DOWN, dt);
 }
 
 void Engine::render() {
@@ -127,13 +176,24 @@ void Engine::render() {
 
     shader->use();
 
-    // Model: de momento el triángulo se queda quieto en el origen, sin
+    // Model: de momento el cubo se queda quieto en el origen, sin
     // rotación ni escala — matriz identidad.
+    // OJO: se llama "modelMatrix" y no "model" a propósito — ya existe un
+    // miembro de la clase llamado "model" (el unique_ptr<Model> del cubo
+    // cargado), y una variable local con el mismo nombre lo taparía dentro
+    // de esta función.
     glm::mat4 modelMatrix = glm::mat4(1.0f);
 
     shader->setMat4("model", modelMatrix);
     shader->setMat4("view", camera->getViewMatrix());
     shader->setMat4("projection", camera->getProjectionMatrix());
+
+    // Uniforms de iluminación. Luz direccional "desde arriba y de lado",
+    // como si fuera el sol a media tarde.
+    shader->setVec3("lightDir", glm::vec3(-0.4f, -1.0f, -0.3f));
+    shader->setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
+    shader->setVec3("objectColor", glm::vec3(0.9f, 0.4f, 0.2f));  // el naranja de siempre
+    shader->setVec3("viewPos", camera->getPosition());
 
     model->draw();
 

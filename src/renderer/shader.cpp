@@ -1,8 +1,9 @@
 #include "shader.hpp"
+
 #include <iostream>
 #include <vector>
 
-Shader::Shader(const std::string &vertexSrc, const std::string &fragmentSrc) {
+Shader::Shader(const std::string& vertexSrc, const std::string& fragmentSrc) {
     GLuint vertexShader = compile(GL_VERTEX_SHADER, vertexSrc);
     GLuint fragmentShader = compile(GL_FRAGMENT_SHADER, fragmentSrc);
 
@@ -20,8 +21,7 @@ Shader::Shader(const std::string &vertexSrc, const std::string &fragmentSrc) {
         glGetProgramiv(programId, GL_INFO_LOG_LENGTH, &logLength);
         std::vector<char> log(logLength);
         glGetProgramInfoLog(programId, logLength, nullptr, log.data());
-        std::cerr << "Error linking shader program:\n"
-                  << log.data() << std::endl;
+        std::cerr << "Error linking shader program:\n" << log.data() << std::endl;
         std::exit(1);
     }
 
@@ -31,11 +31,13 @@ Shader::Shader(const std::string &vertexSrc, const std::string &fragmentSrc) {
     glDeleteShader(fragmentShader);
 }
 
-Shader::~Shader() { glDeleteProgram(programId); }
+Shader::~Shader() {
+    glDeleteProgram(programId);
+}
 
-GLuint Shader::compile(GLenum type, const std::string &source) {
+GLuint Shader::compile(GLenum type, const std::string& source) {
     GLuint shader = glCreateShader(type);
-    const char *src = source.c_str();
+    const char* src = source.c_str();
     glShaderSource(shader, 1, &src, nullptr);
     glCompileShader(shader);
 
@@ -46,23 +48,28 @@ GLuint Shader::compile(GLenum type, const std::string &source) {
         glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLength);
         std::vector<char> log(logLength);
         glGetShaderInfoLog(shader, logLength, nullptr, log.data());
-        std::string typeName =
-            (type == GL_VERTEX_SHADER) ? "vertex" : "fragment";
-        std::cerr << "Error compiling " << typeName << " shader:\n"
-                  << log.data() << std::endl;
+        std::string typeName = (type == GL_VERTEX_SHADER) ? "vertex" : "fragment";
+        std::cerr << "Error compiling " << typeName << " shader:\n" << log.data() << std::endl;
         std::exit(1);
     }
 
     return shader;
 }
 
-void Shader::use() const { glUseProgram(programId); }
+void Shader::use() const {
+    glUseProgram(programId);
+}
 
-void Shader::setMat4(const std::string &name, const glm::mat4 &matrix) const {
+void Shader::setMat4(const std::string& name, const glm::mat4& matrix) const {
     // glGetUniformLocation busca la variable uniform por su nombre EXACTO
     // tal como está declarada en el GLSL. Si el nombre no coincide (typo,
     // o la variable no se usa y el compilador GLSL la eliminó), devuelve
     // -1 en vez de crashear — es un bug silencioso, no lanza error.
     GLint location = glGetUniformLocation(programId, name.c_str());
     glUniformMatrix4fv(location, 1, GL_FALSE, &matrix[0][0]);
+}
+
+void Shader::setVec3(const std::string& name, const glm::vec3& value) const {
+    GLint location = glGetUniformLocation(programId, name.c_str());
+    glUniform3fv(location, 1, &value[0]);
 }

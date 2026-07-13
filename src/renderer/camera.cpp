@@ -1,13 +1,20 @@
 #include "camera.hpp"
+
 #include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
 
 Camera::Camera(glm::vec3 position, float aspectRatio)
-    : position(position), worldUp(glm::vec3(0.0f, 1.0f, 0.0f)),
-      yaw(-90.0f), // -90 grados = mirando hacia -Z, igual que antes con front
-                   // fijo
-      pitch(0.0f), aspectRatio(aspectRatio), fov(45.0f), nearPlane(0.1f),
-      farPlane(100.0f), movementSpeed(2.5f), mouseSensitivity(0.1f) {
+    : position(position),
+      worldUp(glm::vec3(0.0f, 1.0f, 0.0f)),
+      yaw(-90.0f),  // -90 grados = mirando hacia -Z, igual que antes con front
+                    // fijo
+      pitch(0.0f),
+      aspectRatio(aspectRatio),
+      fov(45.0f),
+      nearPlane(0.1f),
+      farPlane(100.0f),
+      movementSpeed(2.5f),
+      mouseSensitivity(0.1f) {
     updateVectors();
 }
 
@@ -34,8 +41,7 @@ glm::mat4 Camera::getViewMatrix() const {
 }
 
 glm::mat4 Camera::getProjectionMatrix() const {
-    return glm::perspective(glm::radians(fov), aspectRatio, nearPlane,
-                            farPlane);
+    return glm::perspective(glm::radians(fov), aspectRatio, nearPlane, farPlane);
 }
 
 void Camera::processKeyboard(CameraMovement direction, float dt) {
@@ -49,6 +55,10 @@ void Camera::processKeyboard(CameraMovement direction, float dt) {
         position -= right * velocity;
     if (direction == CameraMovement::RIGHT)
         position += right * velocity;
+    if (direction == CameraMovement::UP)
+        position += worldUp * velocity;
+    if (direction == CameraMovement::DOWN)
+        position -= worldUp * velocity;
 }
 
 void Camera::processMouseMovement(float xoffset, float yoffset) {

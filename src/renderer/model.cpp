@@ -20,8 +20,10 @@ void Model::loadModel(const std::string& path) {
     //   genera por nosotros (necesario para el .obj simple que no las trae).
     // - FlipUVs: OpenGL espera el origen de las UV en la esquina distinta
     //   a como muchos formatos las guardan — esto lo corrige automáticamente.
-    const aiScene* scene =
-        importer.ReadFile(path, aiProcess_Triangulate | aiProcess_GenNormals | aiProcess_FlipUVs);
+    // Ya no hace falta GenNormals: el .obj ahora trae normales explícitas
+    // por cara (vn). Dejar el flag no rompería nada (assimp no sobreescribe
+    // normales ya presentes), pero es más claro quitarlo si no se necesita.
+    const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs);
 
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
         std::cerr << "Error loading model '" << path << "': " << importer.GetErrorString()

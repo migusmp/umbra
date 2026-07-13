@@ -26,6 +26,13 @@ Window::Window(const std::string& title, int width, int height)
     if (!gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress)) {
         std::cerr << "Error initializing glad" << std::endl;
     }
+
+    // Sin esto, OpenGL dibuja los triángulos en el orden en que se le
+    // pasan, sin importar cuál está más cerca de la cámara — con un cubo
+    // real (varias caras solapándose en pantalla según el ángulo), esto
+    // produce el efecto de "recortes" donde una cara trasera se dibuja
+    // por encima de una delantera, en vez de quedar oculta como debería.
+    glEnable(GL_DEPTH_TEST);
 }
 
 Window::~Window() {
@@ -38,6 +45,7 @@ Window::~Window() {
 SDL_Window* Window::getHandle() const {
     return window;
 }
+
 SDL_GLContext Window::getGLContext() const {
     return glContext;
 }
