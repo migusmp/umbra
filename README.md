@@ -21,8 +21,10 @@ A **C++20** OpenGL 4.5 Core game engine. From scratch, step by step — no frame
 | 🔺 **Mesh** | Generic VAO/VBO/EBO with move semantics | ✅ Done |
 | 📦 **Model** | Assimp .obj loader (recursive scene traversal) | ✅ Done |
 | 💡 **Lighting** | Phong model (ambient + diffuse + specular) | ✅ Done |
+| 🧩 **ECS** | Entity-component registry (sparse array, view<T...>(), shared models) | ✅ Done |
 | 🔄 **Engine** | Game loop (processEvents → update → render) with dt | ✅ Done |
 | 🏗️ **Build** | Makefile, C++20, `pkg-config` deps | ✅ Done |
+| 🖥️ **ImGui** | Dear ImGui vendored (SDL2 + OpenGL3 backends) | 📦 Vendored |
 
 ### What it does right now
 
@@ -31,18 +33,27 @@ main()
   └─ Engine("Umbra", 800, 600)
        ├─ Window (SDL2 + GL 4.5 Core context + depth test)
        ├─ Shader (inline GLSL 450 core)
-       ├─ Model("assets/models/test_cube.obj")  ← Assimp
-       └─ Camera(position, yaw, pitch, aspect)
+       ├─ Registry                     ← ECS
+       │   ├─ Entity 0 (TransformComponent + MeshRendererComponent)
+       │   │   └─ Model("assets/models/test_cube.obj")  ← shared_ptr
+       │   └─ Entity 1 (TransformComponent + MeshRendererComponent)
+       │       └─ Model("assets/models/test_cube.obj")  ← shared_ptr (mismo)
+       ├─ Camera(position, yaw, pitch, aspect)
        └─ run()
             └─ loop { events → update(dt) → render }
+                 ├─ update: processKeyboard → camera
+                 │          rotation.y += 30°·dt  → Entity 0 (ECS)
                  └─ render: clear → shader→use()
-                      ├─ MVP uniforms (model/view/projection)
-                      ├─ Normal matrix (transpose(inverse(model)))
-                      ├─ Lighting uniforms (Phong: ambient + diffuse + specular)
-                      └─ model→draw() → mesh→draw() → glDrawElements
+                      ├─ uniforms (view, projection, lightDir, lightColor, viewPos)
+                      ├─ registry.view<Transform, MeshRenderer>()
+                      │   └─ por cada entidad:
+                      │        ├─ setMat4("model", transform.getModelMatrix())
+                      │        ├─ setVec3("objectColor", ...)
+                      │        └─ model→draw()
+                      └─ SDL_GL_SwapWindow
 ```
 
-Navigate a lit 3D cube in real time. WASD to move, mouse to look around, Space/Shift to go up/down. Close the window, it quits clean — zero leaks, RAII end-to-end.
+Two cubes in real time — one rotating, one static — both sharing the same model via ECS. WASD to move, mouse to look around, Space/Ctrl to go up/down. Zero leaks, RAII end-to-end.
 
 ---
 
@@ -53,9 +64,31 @@ Navigate a lit 3D cube in real time. WASD to move, mouse to look around, Space/S
 | W / S | Forward / Backward |
 | A / D | Strafe left / right |
 | Space | Move up (Y axis) |
-| Shift (left) | Move down (Y axis) |
+| Ctrl (left) | Move down (Y axis) |
 | Mouse | Look around (pitch/yaw) |
 | Escape | Quit |
+
+---
+
+## ECS Architecture
+
+Custom header-only ECS in `src/ecs/`:
+
+- **Entity** — `uint32_t` alias. Zero overhead, no base class.
+- **ComponentArray\<T\>** — Dense contiguous vector + `Entity → index` map. Swap-and-pop for O(1) removal. Cache-friendly iteration.
+- **Registry** — `createEntity()`, `destroyEntity()`, `addComponent<T>()`, `getComponent<T>()`, `view<Ts...>()` (fold-expression filter).
+- **Components** — `TransformComponent` (pos/rot/scale + `getModelMatrix()`) and `MeshRendererComponent` (`shared_ptr<Model>`).
+
+```
+for (Entity e : registry.view<TransformComponent, MeshRendererComponent>()) {
+    auto& t  = registry.getComponent<TransformComponent>(e);
+    auto& mr = registry.getComponent<MeshRendererComponent>(e);
+    shader->setMat4("model", t.getModelMatrix());
+    mr.model->draw();
+}
+```
+
+Modelo compartido entre entidades via `shared_ptr` — un solo `.obj` en VRAM, N transformaciones distintas.
 
 ---
 
@@ -65,8 +98,13 @@ Navigate a lit 3D cube in real time. WASD to move, mouse to look around, Space/S
 src/
 ├── main.cpp                   # Entry point
 ├── core/
-│   ├── engine.hpp/.cpp        # Game loop, input processing, uniforms
+│   ├── engine.hpp/.cpp        # Game loop, ECS iteration, uniforms, input
 │   └── window.hpp/.cpp        # SDL2 window + OpenGL context
+├── ecs/
+│   ├── entity.hpp             # Entity = uint32_t
+│   ├── component_array.hpp    # Dense array, O(1) swap-and-pop
+│   ├── components.hpp         # TransformComponent + MeshRendererComponent
+│   └── registry.hpp           # create/destroy/view<T...>(), add/get/removeComponent
 └── renderer/
     ├── shader.hpp/.cpp        # GLSL compile/link, setMat4, setVec3
     ├── mesh.hpp/.cpp          # Generic VAO/VBO/EBO, Vertex struct, move-only
@@ -76,8 +114,10 @@ assets/
 └── models/
     └── test_cube.obj          # Test model with normals
 vendor/
-└── glad/                      # OpenGL 4.5 Core loader (generated)
+├── glad/                      # OpenGL 4.5 Core loader (generated)
+└── imgui/                     # Dear ImGui core + SDL2/OpenGL3 backends
 build/                         # Object files (gitignored)
+compile_flags.txt              # clangd flags
 docs/
 ├── sdl_basics.md              # SDL2 primer
 └── next_steps.md              # Roadmap
@@ -116,9 +156,10 @@ Directional light from `vec3(-0.4, -1.0, -0.3)`. Normal matrix computed as `tran
 
 ## Next Steps
 
+- [ ] ImGui integration (HUD, debug overlays)
 - [ ] Texture mapping
 - [ ] Multiple lights (point, spot)
-- [ ] ECS architecture
+- [ ] MaterialComponent (per-entity color)
 - [ ] Model loading UI (drag & drop?)
 - [ ] Lighting & materials editor
 - [ ] PBR pipeline
