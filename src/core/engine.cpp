@@ -1,14 +1,15 @@
 #include "engine.hpp"
-#include "../renderer/camera.hpp"
+
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
-#include <vector>
+
+#include "../renderer/camera.hpp"
 
 // De momento el GLSL vive aquí mismo, como texto (raw string literal, con
 // R"(...)"). Más adelante, cuando tengamos un AssetManager, esto pasará a
 // cargarse desde archivos .vert/.frag en assets/shaders/.
 
-static const char *vertexShaderSrc = R"(
+static const char* vertexShaderSrc = R"(
 #version 450 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aNormal;
@@ -23,7 +24,7 @@ void main() {
 }
 )";
 
-static const char *fragmentShaderSrc = R"(
+static const char* fragmentShaderSrc = R"(
 #version 450 core
 out vec4 FragColor;
 
@@ -32,9 +33,8 @@ void main() {
 }
 )";
 
-Engine::Engine(const std::string &title, int width, int height)
+Engine::Engine(const std::string& title, int width, int height)
     : width(width), height(height), running(false), lastTime(0) {
-
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         std::cerr << "Error initializing SDL: " << SDL_GetError() << std::endl;
         std::exit(1);
@@ -48,21 +48,9 @@ Engine::Engine(const std::string &title, int width, int height)
     // vimos con SDL_Init).
     shader = std::make_unique<Shader>(vertexShaderSrc, fragmentShaderSrc);
 
-    // Mismo triángulo de siempre, pero ahora expresado como Mesh: 3
-    // vértices únicos + 3 índices (un solo triángulo, sin nada compartido
-    // que aprovechar todavía — el EBO se nota de verdad con geometría más
-    // compleja, pero la clase ya está lista para eso).
-    std::vector<Vertex> vertices = {
-        {glm::vec3(0.0f, 0.5f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f),
-         glm::vec2(0.5f, 1.0f)},
-        {glm::vec3(-0.5f, -0.5f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f),
-         glm::vec2(0.0f, 0.0f)},
-        {glm::vec3(0.5f, -0.5f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f),
-         glm::vec2(1.0f, 0.0f)},
-    };
-    std::vector<unsigned int> indices = {0, 1, 2};
-
-    mesh = std::make_unique<Mesh>(vertices, indices);
+    // Se acabó construir vértices a mano — Model se encarga de leer el
+    // archivo y montar la geometría real por dentro.
+    model = std::make_unique<Model>("assets/models/test_cube.obj");
 
     float aspectRatio = static_cast<float>(width) / static_cast<float>(height);
     // Cámara colocada un poco atrás en Z, mirando hacia el origen (donde
@@ -79,7 +67,9 @@ Engine::Engine(const std::string &title, int width, int height)
     running = true;
 }
 
-Engine::~Engine() { SDL_Quit(); }
+Engine::~Engine() {
+    SDL_Quit();
+}
 
 void Engine::run() {
     while (running) {
@@ -104,9 +94,8 @@ void Engine::processEvents() {
             // yrel se invierte: en pantalla, "abajo" es positivo, pero
             // queremos que mover el ratón hacia ARRIBA incline la cámara
             // hacia arriba (pitch positivo).
-            camera->processMouseMovement(
-                static_cast<float>(event.motion.xrel),
-                static_cast<float>(-event.motion.yrel));
+            camera->processMouseMovement(static_cast<float>(event.motion.xrel),
+                                         static_cast<float>(-event.motion.yrel));
         }
 
         if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
@@ -120,7 +109,7 @@ void Engine::update(float dt) {
     // o no) en cada frame — a diferencia de SDL_KEYDOWN/UP en el loop de
     // eventos, que solo avisa del CAMBIO de estado. Para movimiento
     // continuo (mientras la tecla siga pulsada), esto es lo correcto.
-    const Uint8 *keys = SDL_GetKeyboardState(nullptr);
+    const Uint8* keys = SDL_GetKeyboardState(nullptr);
 
     if (keys[SDL_SCANCODE_W])
         camera->processKeyboard(CameraMovement::FORWARD, dt);
@@ -140,13 +129,13 @@ void Engine::render() {
 
     // Model: de momento el triángulo se queda quieto en el origen, sin
     // rotación ni escala — matriz identidad.
-    glm::mat4 model = glm::mat4(1.0f);
+    glm::mat4 modelMatrix = glm::mat4(1.0f);
 
-    shader->setMat4("model", model);
+    shader->setMat4("model", modelMatrix);
     shader->setMat4("view", camera->getViewMatrix());
     shader->setMat4("projection", camera->getProjectionMatrix());
 
-    mesh->draw();
+    model->draw();
 
     SDL_GL_SwapWindow(window->getHandle());
 }

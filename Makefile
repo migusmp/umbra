@@ -10,14 +10,15 @@ CXX := g++
 # si cambia el propio .cpp. Sin esto, tocar un .hpp no forzaba recompilación
 # de quien lo incluía, y podían quedar .o desincronizados entre sí (el bug
 # que causó el segfault de antes).
-CXXFLAGS := -std=c++20 -Wall -Wextra -MMD -MP -I vendor/glad/include $(shell pkg-config --cflags sdl2)
-LDFLAGS := $(shell pkg-config --libs sdl2) -ldl
+CXXFLAGS := -std=c++20 -Wall -Wextra -MMD -MP -I vendor/glad/include \
+            $(shell pkg-config --cflags sdl2) $(shell pkg-config --cflags assimp)
+LDFLAGS := $(shell pkg-config --libs sdl2) $(shell pkg-config --libs assimp) -ldl
 
 TARGET := umbra
 
 # Fuentes: tu código + glad (que es C, pero g++ lo compila igual)
 SRC := src/main.cpp src/core/window.cpp src/core/engine.cpp \
-       src/renderer/shader.cpp src/renderer/mesh.cpp src/renderer/camera.cpp \
+       src/renderer/shader.cpp src/renderer/mesh.cpp src/renderer/model.cpp src/renderer/camera.cpp \
        vendor/glad/src/glad.c
 
 # Un .o por cada .cpp/.c, guardados en build/ para no ensuciar el proyecto

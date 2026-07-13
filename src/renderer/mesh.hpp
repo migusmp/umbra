@@ -1,5 +1,6 @@
 #pragma once
 #include <glad/glad.h>
+
 #include <glm/glm.hpp>
 #include <vector>
 
@@ -14,16 +15,25 @@ struct Vertex {
 };
 
 class Mesh {
-  public:
-    Mesh(const std::vector<Vertex> &vertices,
-         const std::vector<unsigned int> &indices);
+   public:
+    Mesh(const std::vector<Vertex>& vertices, const std::vector<unsigned int>& indices);
     ~Mesh();
+
+    // Mesh posee recursos de GPU (vao/vbo/ebo) — copiarla literalmente
+    // duplicaría esos números sin duplicar el recurso real, y al destruir
+    // ambas copias se liberaría el mismo buffer dos veces (double free).
+    // Se prohíbe la copia y se permite solo MOVER: transferir la propiedad
+    // de un objeto Mesh a otro, dejando el original vacío.
+    Mesh(const Mesh&) = delete;
+    Mesh& operator=(const Mesh&) = delete;
+
+    Mesh(Mesh&& other) noexcept;
+    Mesh& operator=(Mesh&& other) noexcept;
 
     void draw() const;
 
-  private:
-    void setupMesh(const std::vector<Vertex> &vertices,
-                   const std::vector<unsigned int> &indices);
+   private:
+    void setupMesh(const std::vector<Vertex>& vertices, const std::vector<unsigned int>& indices);
 
     GLuint vao;
     GLuint vbo;
